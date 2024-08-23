@@ -203,7 +203,7 @@ def train(
         # copyfile(cfg, weights_to + '/cfg/yolo3.cfg')
         # copyfile(data_cfg, weights_to + '/cfg/ccmcpe.json')
 
-        weights_to = '/kaggle/working/'
+        #weights_to = '/kaggle/working/'
         latest = osp.join(weights_to, 'latest.pt')
         torch.save(checkpoint, latest)
         if epoch % save_every == 0 and epoch != 0:
