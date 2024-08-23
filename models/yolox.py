@@ -169,8 +169,7 @@ class Head2(nn.Module):
             #id_target: n_people
             emb_vectors = torch.stack(total_emb_preds) #n_peo, 128
             pred_class_output = self.linear(emb_vectors)
-            id_targets = id_targets.long()
-            loss = cross_entropy_loss(pred_class_output, torch.stack(id_targets))
+            loss = cross_entropy_loss(pred_class_output, torch.stack(id_targets).long())
             return loss    
 
     def get_emb_vector(self, yolo_outputs, reid_feat, reid_idx):
