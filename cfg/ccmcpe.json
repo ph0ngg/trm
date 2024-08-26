@@ -1,5 +1,5 @@
 {
-    "root":"/kaggle/input/mot-17/kaggl/",
+    "root":"/kaggle/input/mot-17/",
     "train":
     {
         "mot17":"./data/mot17.train"
