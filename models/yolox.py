@@ -116,7 +116,7 @@ class CBAM(nn.Module):
 class Head2(nn.Module):
     def __init__(self):
         super().__init__()
-        self.nids = 1565
+        self.nids = 1638
         self.embed_length = 128
         self.neck2 = nn.Conv2d(1024, self.embed_length, 1, 1)
         self.neck1 = nn.Conv2d(512, self.embed_length, 1, 1)
@@ -169,6 +169,7 @@ class Head2(nn.Module):
             #id_target: n_people
             emb_vectors = torch.stack(total_emb_preds) #n_peo, 128
             pred_class_output = self.linear(emb_vectors)
+            #print(f'pred_class_output: {pred_class_output.shape}, id_target: {torch.stack(new_id_targets).shape}')
             loss = cross_entropy_loss(pred_class_output, torch.stack(id_targets).long())
             return loss    
 
