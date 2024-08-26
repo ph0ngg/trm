@@ -57,7 +57,7 @@ def train(
     # Initialize model
     #model = Darknet(cfg, dataset.nID)
     model1 = YOLOX()
-    model1.load_state_dict(torch.load('/kaggle/input/mot-17/kaggl/Towards-Realtime-MOT/yolox_l.pth')['model'], strict = True)
+    model1.load_state_dict(torch.load('/kaggle/input/towards-realtime-mot/Towards-Realtime-MOT/yolox_l.pth')['model'], strict = True)
 
     model2 = Head2()
    
