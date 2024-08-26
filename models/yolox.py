@@ -125,7 +125,8 @@ class Head2(nn.Module):
         self.cbam2 = CBAM(self.embed_length, r=4)
         self.cbam0 = CBAM(self.embed_length, r=4)
         self.linear = nn.Linear(self.embed_length, self.nids)
-        self.tloss = False
+        self.type_loss = 'triplet_and_ce'
+
     def forward(self, xin, yolo_outputs, reid_idx,  targets = None):
         neck_feat_0 = self.cbam0(self.neck0(xin[0]))
         neck_feat_1 = self.cbam1(self.neck1(xin[1]))
@@ -161,10 +162,10 @@ class Head2(nn.Module):
                 total_emb_preds.append(emb_preds[:, i])
 
 
-        if (self.tloss):
+        if (self.type_loss == 'triplet'):
             loss = triplet_loss(torch.stack(total_emb_preds), torch.stack(id_targets))
             return loss
-        else:
+        elif self.type_loss == 'ce':
             #total_emb_preds: n_people, 128
             #id_target: n_people
             emb_vectors = torch.stack(total_emb_preds) #n_peo, 128
@@ -172,6 +173,10 @@ class Head2(nn.Module):
             #print(f'pred_class_output: {pred_class_output.shape}, id_target: {torch.stack(new_id_targets).shape}')
             loss = cross_entropy_loss(pred_class_output, torch.stack(id_targets).long())
             return loss    
+        else:
+            emb_vectors = torch.stack(total_emb_preds) #n_peo, 128
+            pred_class_output = self.linear(emb_vectors)
+            return 0.5*triplet_loss(torch.stack(total_emb_preds), torch.stack(id_targets)) + 0.5 * cross_entropy_loss(pred_class_output, torch.stack(id_targets).long())
 
     def get_emb_vector(self, yolo_outputs, reid_feat, reid_idx):
         total_emb_preds = []
