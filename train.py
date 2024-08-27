@@ -165,7 +165,7 @@ def train(
             #     if param.requires_grad:
             #         print(name, param.requires_grad)
             try:
-                loss = model2(xin, filtered_outputs,  filtered_outputs_reid_idx, targets.cuda())
+                loss = model2(imgs, xin, filtered_outputs,  filtered_outputs_reid_idx, targets.cuda())
                 total_loss += loss
             except:
                 print(imgs_path)

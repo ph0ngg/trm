@@ -124,6 +124,15 @@ def matching(outputs, targets):
             #print(bbox_preds[k][2])
             bbox_preds[k][2] /= 1088
             bbox_preds[k][3] /= 608
+            x1, y1, x2, y2 = bbox_preds[k][:]
+            x = (x1 + x2)/2
+            y = (y1 + y2)/2
+            w = x2 - x1
+            h = y2 - y1
+            bbox_preds[k][0] = x
+            bbox_preds[k][1] = y
+            bbox_preds[k][2] = w
+            bbox_preds[k][3] = h
         obj_preds = outputs[:, 4:5]
         cls_preds = outputs[:, 6:7]
 

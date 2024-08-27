@@ -127,7 +127,7 @@ class Head2(nn.Module):
         self.linear = nn.Linear(self.embed_length, self.nids)
         self.type_loss = 'triplet_and_ce'
 
-    def forward(self, xin, yolo_outputs, reid_idx,  targets = None):
+    def forward(self, imgs, xin, yolo_outputs, reid_idx,  targets = None):
         neck_feat_0 = self.cbam0(self.neck0(xin[0]))
         neck_feat_1 = self.cbam1(self.neck1(xin[1]))
         neck_feat_2 = self.cbam2(self.neck2(xin[2]))
@@ -189,4 +189,3 @@ class Head2(nn.Module):
 #test_matching
 
 #training: model1(img) --> output (b, n_object, 7), vi tri reid_idx
-
