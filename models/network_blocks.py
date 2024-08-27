@@ -208,3 +208,116 @@ class Focus(nn.Module):
             dim=1,
         )
         return self.conv(x)
+
+from torch.nn.parameter import Parameter
+import torch.nn.functional as F
+
+class CCN(nn.Module):
+    def __init__(self,k_size = 3,ch=()):
+        super(CCN, self).__init__()
+        #self.independence = 0.7
+        #self.share = 0.3
+        self.w1 = Parameter(torch.ones(1)*0.5)
+        self.w2 = Parameter(torch.ones(1)*0.5)
+        w = 6
+        h = 10
+        self.avg_pool = nn.AdaptiveAvgPool2d((w,h))
+
+        self.c_attention1 = nn.Sequential(nn.Conv2d(ch, ch, kernel_size=3, stride=1, padding=1, bias=True),
+                                          nn.InstanceNorm2d(num_features=ch),
+                                          nn.LeakyReLU(0.3, inplace=True))
+        self.c_attention2 = nn.Sequential(nn.Conv2d(ch, ch, kernel_size=3, stride=1, padding=1, bias=True),
+                                          nn.InstanceNorm2d(num_features=ch),
+                                          nn.LeakyReLU(0.3, inplace=True))
+
+
+        self.sigmoid = nn.Sigmoid()
+        #self.conv1 = Conv(ch, ch, k=1)
+        #self.conv2 = Conv(ch, ch, k=1)
+
+    def forward(self, x):
+        # x: input features with shape [b, c, h, w]
+        b, c, h, w = x.size()
+
+        # feature descriptor on the global spatial information
+        y = self.avg_pool(x)
+
+        y_t1 = self.c_attention1(y)
+        y_t2 = self.c_attention2(y)
+        bs,c,h,w = y_t1.shape
+        y_t1 =y_t1.view(bs, c, h*w)
+        y_t2 =y_t2.view(bs, c, h*w)
+
+        y_t1_T = y_t1.permute(0, 2, 1)
+        y_t2_T = y_t2.permute(0, 2, 1)
+        M_t1 = torch.matmul(y_t1, y_t1_T)
+        M_t2 = torch.matmul(y_t2, y_t2_T)
+        M_t1 = F.softmax(M_t1, dim=-1)
+        M_t2 = F.softmax(M_t2, dim=-1)
+
+        M_s1 = torch.matmul(y_t1, y_t2_T)
+        M_s2 = torch.matmul(y_t2, y_t1_T)
+        M_s1 = F.softmax(M_s1, dim=-1)
+        M_s2 = F.softmax(M_s2, dim=-1)
+
+        x_t1 = x
+        x_t2 = x
+        bs,c,h,w = x_t1.shape
+        x_t1 = x_t1.contiguous().view(bs, c, h*w)
+        x_t2 = x_t2.contiguous().view(bs, c, h*w)
+
+        #x_t1 = torch.matmul(self.independence*M_t1 + self.share*M_s1, x_t1).contiguous().view(bs, c, h, w)
+        #x_t2 = torch.matmul(self.independence*M_t2 + self.share*M_s2, x_t2).contiguous().view(bs, c, h, w)
+        x_t1 = torch.matmul(self.w1*M_t1 + (1-self.w1)*M_s1, x_t1).contiguous().view(bs, c, h, w)
+        x_t2 = torch.matmul(self.w2*M_t2 + (1-self.w2)*M_s2, x_t2).contiguous().view(bs, c, h, w)
+        #print("M_t1",torch.sort(M_t1[0][0]))
+        #print("y_t1",torch.max(y_t1),torch.min(y_t1))
+        #print("y_t2", torch.max(y_t2), torch.min(y_t2))
+        return [x_t1+x,x_t2+x]
+    
+class SAM(nn.Module):
+    def __init__(self, bias=False):
+        super(SAM, self).__init__()
+        self.bias = bias
+        self.conv = nn.Conv2d(in_channels=2, out_channels=1, kernel_size=7, stride=1, padding=3, dilation=1, bias=self.bias)
+
+    def forward(self, x):
+        max = torch.max(x,1)[0].unsqueeze(1)
+        avg = torch.mean(x,1).unsqueeze(1)
+        concat = torch.cat((max,avg), dim=1)
+        output = self.conv(concat)
+        output = F.sigmoid(output) * x 
+        return output 
+
+class CAM(nn.Module):
+    def __init__(self, channels, r):
+        super(CAM, self).__init__()
+        self.channels = channels
+        self.r = r
+        self.linear = nn.Sequential(
+            nn.Linear(in_features=self.channels, out_features=self.channels//self.r, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(in_features=self.channels//self.r, out_features=self.channels, bias=True))
+
+    def forward(self, x):
+        max = F.adaptive_max_pool2d(x, output_size=1)
+        avg = F.adaptive_avg_pool2d(x, output_size=1)
+        b, c, _, _ = x.size()
+        linear_max = self.linear(max.view(b,c)).view(b, c, 1, 1)
+        linear_avg = self.linear(avg.view(b,c)).view(b, c, 1, 1)
+        output = linear_max + linear_avg
+        output = F.sigmoid(output) * x
+        return output
+    
+class CBAM(nn.Module):
+    def __init__(self, channels, r):
+        super(CBAM, self).__init__()
+        self.channels = channels
+        self.r = r
+        self.sam = SAM(bias=False)
+        self.cam = CAM(channels=self.channels, r=self.r)
+
+    def forward(self, x):
+        output = self.cam(x)
+        output = self.sam(output)
+        return output + x

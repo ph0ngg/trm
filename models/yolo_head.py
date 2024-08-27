@@ -82,10 +82,16 @@ class YOLOXHead(nn.Module):
         super().__init__()
 
         self.num_classes = 80
+        self.embedding_dims = 128
         self.decode_in_inference = True  # for deploy, set to False
 
         self.cls_convs = nn.ModuleList()
         self.reg_convs = nn.ModuleList()
+        self.id_convs = nn.ModuleList()
+        self.id_preds = nn.ModuleList()
+
+        self.rcns = nn.ModuleList()
+        
         self.cls_preds = nn.ModuleList()
         self.reg_preds = nn.ModuleList()
         self.obj_preds = nn.ModuleList()
@@ -142,6 +148,37 @@ class YOLOXHead(nn.Module):
                     ]
                 )
             )
+            self.id_convs.append(
+                nn.Sequential(
+                    *[
+                        Conv(
+                            in_channels=int(256 * width),
+                            out_channels=int(256 * width),
+                            ksize=3,
+                            stride=1,
+                            act=act,
+                        ),
+                        Conv(
+                            in_channels=int(256 * width),
+                            out_channels=int(256 * width),
+                            ksize=3,
+                            stride=1,
+                            act=act,
+                        ),
+                    ]
+                )
+            )
+
+            self.id_preds.append(
+                nn.Conv2d(
+                    in_channels=int(256 * width),
+                    out_channels=self.embedding_dims,
+                    kernel_size=1,
+                    stride=1,
+                    padding=0,
+                )
+            )
+
             self.cls_preds.append(
                 nn.Conv2d(
                     in_channels=int(256 * width),
@@ -227,12 +264,14 @@ class YOLOXHead(nn.Module):
         #shape: B, C, h0*w0 + h1*w1 + h2*w2
         #print(reid_feat.shape)
         ###        
-        for k, (cls_conv, reg_conv, stride_this_level, x) in enumerate(
-            zip(self.cls_convs, self.reg_convs, self.strides, xin)
+        for k, (cls_conv, reg_conv, id_conv, stride_this_level, x) in enumerate(
+            zip(self.cls_convs, self.reg_convs, self.id_convs, self.strides, xin)
         ):  
             x = self.stems[k](x)
             cls_x = x
             reg_x = x
+
+            id_x = x
 
             cls_feat = cls_conv(cls_x)
             cls_output = self.cls_preds[k](cls_feat)
@@ -241,8 +280,12 @@ class YOLOXHead(nn.Module):
             reg_output = self.reg_preds[k](reg_feat)
             obj_output = self.obj_preds[k](reg_feat)
 
+            id_feat = id_conv(id_x)
+            id_output = self.id_preds[k](id_feat) #B, 128, H, W
+
+
             if self.training:
-                output = torch.cat([reg_output, obj_output, cls_output], 1)
+                output = torch.cat([reg_output, obj_output, cls_output, id_output], 1)
                 output, grid = self.get_output_and_grid(
                     output, k, stride_this_level, xin[0].type()
                 )
@@ -266,7 +309,7 @@ class YOLOXHead(nn.Module):
 
             else:
                 output = torch.cat(
-                    [reg_output, obj_output.sigmoid(), cls_output.sigmoid()], 1
+                    [reg_output, obj_output.sigmoid(), cls_output.sigmoid(), id_output], 1
                 )
             outputs.append(output)
 
@@ -280,15 +323,14 @@ class YOLOXHead(nn.Module):
                 labels,
                 torch.cat(outputs, 1),
                 origin_preds,
-                reid_feat,
                 dtype=xin[0].dtype,
             )
         else:
             self.hw = [x.shape[-2:] for x in outputs]
-            # [batch, n_anchors_all, 85]
+            # [batch, n_anchors_all, 5 + n_class + n_embedding]
             outputs = torch.cat(
                 [x.flatten(start_dim=2) for x in outputs], dim=2
-            ).permute(0, 2, 1)
+            ).permute(0, 2, 1) #B, H*W, C
             if self.decode_in_inference:
                 return self.decode_outputs(outputs, dtype=xin[0].type())
             else:
@@ -298,7 +340,7 @@ class YOLOXHead(nn.Module):
         grid = self.grids[k]
 
         batch_size = output.shape[0]
-        n_ch = 5 + self.num_classes
+        n_ch = 5 + self.num_classes + self.embedding_dims
         hsize, wsize = output.shape[-2:]
         
         if grid.shape[2:4] != output.shape[2:4]:
@@ -349,8 +391,8 @@ class YOLOXHead(nn.Module):
     ):
         bbox_preds = outputs[:, :, :4]  # [batch, n_anchors_all, 4]
         obj_preds = outputs[:, :, 4:5]  # [batch, n_anchors_all, 1]
-        cls_preds = outputs[:, :, 5:]  # [batch, n_anchors_all, n_cls]
-        emb_preds = []
+        cls_preds = outputs[:, :, 5:5 + self.num_classes]  # [batch, n_anchors_all, n_cls]
+        emb_preds = outputs[:, :, 5+ self.num_classes:]
 
         ###
         ###
@@ -383,6 +425,7 @@ class YOLOXHead(nn.Module):
                 reg_target = outputs.new_zeros((0, 4))
                 l1_target = outputs.new_zeros((0, 4))
                 obj_target = outputs.new_zeros((total_num_anchors, 1))
+                id_target = outputs.new_zeros((0, 1))
                 fg_mask = outputs.new_zeros(total_num_anchors).bool()
             else:
                 gt_bboxes_per_image = labels[batch_idx, :num_gt, 2:6]
@@ -458,7 +501,7 @@ class YOLOXHead(nn.Module):
                         y_shifts=y_shifts[0][fg_mask],
                     )
 #               
-                emb_pred = reid_feat[batch_idx, :, fg_mask].view(-1, 128)
+                #emb_pred = reid_feat[batch_idx, :, fg_mask].view(-1, 128)
             # emb_vectors_pred = reid_feat[:, :, fg_mask]
             # total_triplet_loss = 0
             # for i in range(emb_vectors_pred.shape[2]):
@@ -469,7 +512,7 @@ class YOLOXHead(nn.Module):
             reg_targets.append(reg_target)
             obj_targets.append(obj_target.to(dtype))
             fg_masks.append(fg_mask)
-            emb_preds.append(emb_pred)
+            #emb_preds.append(emb_pred)
             if self.use_l1:
                 l1_targets.append(l1_target)
 
@@ -478,7 +521,9 @@ class YOLOXHead(nn.Module):
         obj_targets = torch.cat(obj_targets, 0)
         fg_masks = torch.cat(fg_masks, 0)
         id_targets = torch.cat(id_targets, 0)
-        emb_preds = torch.cat(emb_preds, 0)
+
+        loss_id = triplet_loss(emb_preds.view(-1, 128)[fg_masks], id_targets)
+        #emb_preds = torch.cat(emb_preds, 0)
         # emb_preds = reid_feat[:, :, fg_masks]
         #print('emb_preds.shape', emb_preds.shape)
         if self.use_l1:
@@ -507,8 +552,8 @@ class YOLOXHead(nn.Module):
 
         reg_weight = 5.0
 
-        #loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1 + loss_id
-        loss = loss_id
+        loss = reg_weight * loss_iou + loss_obj + loss_cls + loss_l1 + loss_id
+        #loss = loss_id
         print(loss_iou, loss_cls, loss_id)
         return (
             loss,

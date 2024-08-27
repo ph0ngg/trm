@@ -172,6 +172,7 @@ def triplet_loss(embedding, targets, margin = 0.3, norm_feat= False, hard_mining
 
 def cross_entropy_loss(pred_class_outputs, gt_classes, eps = 0.1, alpha=0.2):
     num_classes = pred_class_outputs.size(1)
+    #assert torch.all(gt_classes >= 0) and torch.all(gt_classes < num_classes), "Invalid class index found in gt_classes"
 
     if eps >= 0:
         smooth_param = eps
@@ -184,7 +185,13 @@ def cross_entropy_loss(pred_class_outputs, gt_classes, eps = 0.1, alpha=0.2):
     with torch.no_grad():
         targets = torch.ones_like(log_probs)
         targets *= smooth_param / (num_classes - 1)
-        targets.scatter_(1, gt_classes.data.unsqueeze(1), (1 - smooth_param))
+        try:
+            targets.scatter_(1, gt_classes.data.unsqueeze(1), (1 - smooth_param))
+        except RuntimeError as e:
+            print("targets:", targets)
+            print("gt_classes:", gt_classes)
+            print("smooth_param:", smooth_param)
+            raise e
 
     loss = (-targets * log_probs).sum(dim=1)
 

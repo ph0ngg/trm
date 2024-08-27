@@ -164,11 +164,11 @@ def train(
             # for name, param in model.named_parameters():
             #     if param.requires_grad:
             #         print(name, param.requires_grad)
-
-            loss = model2(xin, filtered_outputs,  filtered_outputs_reid_idx, targets.cuda())
-            total_loss += loss
-            # except:
-            #     print(imgs_path)
+            try:
+                loss = model2(xin, filtered_outputs,  filtered_outputs_reid_idx, targets.cuda())
+                total_loss += loss
+            except:
+                print(imgs_path)
             #print(loss)
             loss = torch.mean(loss)
             loss.backward()
