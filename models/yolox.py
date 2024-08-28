@@ -156,7 +156,7 @@ class Head2(nn.Module):
             box[:, 4] *= 608
             box[:, 5] *= 1088
             out_boxes.append(cxcywh2xyxy(box[:, 2:6]))
-        print(out_boxes)
+
         people_feature_map = ops.roi_align(next_feat_0, out_boxes, output_size = (64, 32), spatial_scale = 0.125, sampling_ratio=2)
         #print(people_feature_map.shape)
         x = self.os_block_3(people_feature_map)
