@@ -10,9 +10,8 @@ import numpy as np
 import torch
 from .matching import *
 from .losses import *
-from .network_blocks import OSNet, OSBlock
 
-from models.utils.boxes import postprocess, cxcywh2xyxy
+from models.utils.boxes import postprocess
 
 
 
@@ -26,9 +25,9 @@ class YOLOX(nn.Module):
     def __init__(self, backbone=None, head=None):
         super().__init__()
         if backbone is None:
-            backbone = YOLOPAFPN(depth= 0.67, width= 0.75)
+            backbone = YOLOPAFPN()
         if head is None:
-            head = YOLOXHead(width= 0.75, num_classes= 80)
+            head = YOLOXHead(80)
 
         self.backbone = backbone
         self.head = head
@@ -36,7 +35,7 @@ class YOLOX(nn.Module):
     def forward(self, x, targets=None):
         # fpn output content features of [dark3, dark4, dark5]
         fpn_outs = self.backbone(x)
-        print(fpn_outs[0].shape)
+        #print(fpn_outs[2].shape)
         if self.training:
             assert targets is not None
             loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg = self.head(
@@ -113,75 +112,80 @@ class CBAM(nn.Module):
 #va outputs du doan cac nguoi co trong anh
 #can lam: tu outputs matching voi targets de lay id, sau do tinh loss
 
-import torchvision.ops as ops
-
-
-def change_box_type(box):
-    x, y, w, h = box[:]
-    x1 = x - w/2
-    y1 = y - h/2
-    x2 = x + w/2
-    y2 = y + h/2
-    return torch.tensor([x1, y1, x2, y2])
 
 class Head2(nn.Module):
     def __init__(self):
         super().__init__()
         self.nids = 1638
-        self.embed_length = 384
-        # self.neck2 = nn.Conv2d(1024, self.embed_length, 1, 1)
-        # self.neck1 = nn.Conv2d(512, self.embed_length, 1, 1)
-        self.neck0 = nn.Conv2d(192, 192, 1, 1)
-        # self.cbam1 = CBAM(self.embed_length, r=4)
-        # self.cbam2 = CBAM(self.embed_length, r=4)
-        self.cbam0 = CBAM(192, r=4)
-
-        self.os_block_3 = OSBlock(in_channels= 192, out_channels= 288)
-        self.os_block_4 = OSBlock(in_channels= 288, out_channels= 384)
-        self.global_avgpool = nn.AdaptiveAvgPool2d(1)
-
+        self.embed_length = 128
+        self.neck2 = nn.Conv2d(1024, self.embed_length, 1, 1)
+        self.neck1 = nn.Conv2d(512, self.embed_length, 1, 1)
+        self.neck0 = nn.Conv2d(256, self.embed_length, 1, 1)
+        self.cbam1 = CBAM(self.embed_length, r=4)
+        self.cbam2 = CBAM(self.embed_length, r=4)
+        self.cbam0 = CBAM(self.embed_length, r=4)
         self.linear = nn.Linear(self.embed_length, self.nids)
         self.type_loss = 'triplet_and_ce'
 
-    def forward(self, xin, targets = None):
-        # neck_feat_0 = self.cbam0(self.neck0(xin[0])) # chi lay output tu dark3
-        #targets.shape: B, n_peo, 6
-        next_feat_0 = self.cbam0(xin[0])
-        boxes = list(torch.unbind(targets, dim=0))
-        out_boxes = []
-        target_ids = targets.view(-1, 6)[:, 1]
-        for box in boxes:
-            out_boxes.append(cxcywh2xyxy(box[:, 2:6]))
-        people_feature_map = ops.roi_align(next_feat_0, out_boxes, output_size = (32, 64), spatial_scale = 0.125, sampling_ratio=2)
-        print(people_feature_map.shape)
-        x = self.os_block_3(people_feature_map)
-        x = self.os_block_4(x) #B, 512, H, W
-        v = self.global_avgpool(x)
-        v = v.view(v.size(0), -1)
-        y = self.linear(v)
-        print(target_ids.shape)
-        #y: num_peo, num_ids
+    def forward(self, xin, yolo_outputs, reid_idx,  targets = None):
+        neck_feat_0 = self.cbam0(self.neck0(xin[0]))
+        neck_feat_1 = self.cbam1(self.neck1(xin[1]))
+        neck_feat_2 = self.cbam2(self.neck2(xin[2]))
 
+        b0, c0, h0, w0 = neck_feat_0.shape
+        b1, c1, h1, w1 = neck_feat_1.shape
+        b2, c2, h2, w2 = neck_feat_2.shape
+
+        reid_feat = torch.cat((neck_feat_0.view(b0, c0, h0*w0), neck_feat_1.view(b1, c1, h1*w1), neck_feat_2.view(b2, c2, h2*w2)), 2)
         if self.training:
-            return self.get_loss(v, target_ids, y)           
+            return self.get_loss(yolo_outputs, targets, reid_feat, reid_idx)           
         else:
-            return v
-    def get_loss(self, v, target_ids, y):
+            return self.get_emb_vector(yolo_outputs, reid_feat, reid_idx)
+    def get_loss(self, yolo_outputs, targets, reid_feat, reid_idx):
+        #gt_ids =  targets[:, :, 1]
+        total_emb_preds = []
+        id_targets = []
+        for batch_idx in range(len(yolo_outputs)):
+            #print(yolo_outputs[batch_idx])
+            matched_gt_inds = matching(yolo_outputs[batch_idx], targets[batch_idx])[1]
+            #print('match_gt_inds', matched_gt_inds)
+            #match_gt_inds: cai box du doan ung voi cai box thuc te thu bao nhieu
+            gt_ids = targets[batch_idx, :, 1]
+
+            id_target = gt_ids[matched_gt_inds] # id cua nguoi dua vao
+
+
+            emb_preds = reid_feat[batch_idx, :, reid_idx[batch_idx][:len(id_target)]]
+            id_targets.extend(id_target)
+
+            for i in range(emb_preds.shape[1]):
+                total_emb_preds.append(emb_preds[:, i])
+
+
         if (self.type_loss == 'triplet'):
-            loss = triplet_loss(v, target_ids)
+            loss = triplet_loss(torch.stack(total_emb_preds), torch.stack(id_targets))
             return loss
         elif self.type_loss == 'ce':
             #total_emb_preds: n_people, 128
             #id_target: n_people
+            emb_vectors = torch.stack(total_emb_preds) #n_peo, 128
+            pred_class_output = self.linear(emb_vectors)
             #print(f'pred_class_output: {pred_class_output.shape}, id_target: {torch.stack(new_id_targets).shape}')
-            loss = cross_entropy_loss(y, target_ids.long())
+            loss = cross_entropy_loss(pred_class_output, torch.stack(id_targets).long())
             return loss    
         else:
+            emb_vectors = torch.stack(total_emb_preds) #n_peo, 128
+            pred_class_output = self.linear(emb_vectors)
+            return 0.5*triplet_loss(torch.stack(total_emb_preds), torch.stack(id_targets)) + 0.5 * cross_entropy_loss(pred_class_output, torch.stack(id_targets).long())
 
-            return 0.5*triplet_loss(v, target_ids) + 0.5 * cross_entropy_loss(y, target_ids.long())
-
-
-        
+    def get_emb_vector(self, yolo_outputs, reid_feat, reid_idx):
+        total_emb_preds = []
+        #reid_feat: B, n, 128
+        for batch_idx in range(len(yolo_outputs)):
+            emb_preds = reid_feat[batch_idx, :, reid_idx[batch_idx]]
+            for i in range(emb_preds.shape[1]):
+                total_emb_preds.append(emb_preds[:, i])
+        return yolo_outputs, total_emb_preds
 #test_matching
 
 #training: model1(img) --> output (b, n_object, 7), vi tri reid_idx
