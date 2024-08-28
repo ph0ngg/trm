@@ -36,7 +36,7 @@ class YOLOX(nn.Module):
     def forward(self, x, targets=None):
         # fpn output content features of [dark3, dark4, dark5]
         fpn_outs = self.backbone(x)
-        print(fpn_outs[0].shape)
+        #print(fpn_outs[0].shape)
         if self.training:
             assert targets is not None
             loss, iou_loss, conf_loss, cls_loss, l1_loss, num_fg = self.head(
@@ -153,13 +153,13 @@ class Head2(nn.Module):
         for box in boxes:
             out_boxes.append(cxcywh2xyxy(box[:, 2:6]))
         people_feature_map = ops.roi_align(next_feat_0, out_boxes, output_size = (32, 64), spatial_scale = 0.125, sampling_ratio=2)
-        print(people_feature_map.shape)
+        #print(people_feature_map.shape)
         x = self.os_block_3(people_feature_map)
         x = self.os_block_4(x) #B, 512, H, W
         v = self.global_avgpool(x)
         v = v.view(v.size(0), -1)
         y = self.linear(v)
-        print(target_ids.shape)
+        #print(target_ids.shape)
         #y: num_peo, num_ids
 
         if self.training:
