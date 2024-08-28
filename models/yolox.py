@@ -151,8 +151,13 @@ class Head2(nn.Module):
         out_boxes = []
         target_ids = targets.view(-1, 6)[:, 1]
         for box in boxes:
+            box[:, 2] *= 608
+            box[:, 3] *= 1088
+            box[:, 4] *= 608
+            box[:, 5] *= 1088
             out_boxes.append(cxcywh2xyxy(box[:, 2:6]))
-        people_feature_map = ops.roi_align(next_feat_0, out_boxes, output_size = (32, 64), spatial_scale = 0.125, sampling_ratio=2)
+        print(out_boxes)
+        people_feature_map = ops.roi_align(next_feat_0, out_boxes, output_size = (64, 32), spatial_scale = 0.125, sampling_ratio=2)
         #print(people_feature_map.shape)
         x = self.os_block_3(people_feature_map)
         x = self.os_block_4(x) #B, 512, H, W

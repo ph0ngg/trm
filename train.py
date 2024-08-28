@@ -57,7 +57,7 @@ def train(
     # Initialize model
     #model = Darknet(cfg, dataset.nID)
     model1 = YOLOX()
-    model1.load_state_dict(torch.load('/kaggle/input/yolox-m/yolox_m.pth')['model'], strict = True)
+    model1.load_state_dict(torch.load('/mnt/data_ubuntu/phongnn/yolox_m.pth')['model'], strict = True)
 
     model2 = Head2()
    
@@ -164,7 +164,7 @@ def train(
             # for name, param in model.named_parameters():
             #     if param.requires_grad:
             #         print(name, param.requires_grad)
-
+            print(imgs.shape)
             loss = model2(xin, targets.cuda())
             total_loss += loss
 
