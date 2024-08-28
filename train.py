@@ -57,7 +57,7 @@ def train(
     # Initialize model
     #model = Darknet(cfg, dataset.nID)
     model1 = YOLOX()
-    model1.load_state_dict(torch.load('/mnt/data_ubuntu/phongnn/yolox_m.pth')['model'], strict = True)
+    model1.load_state_dict(torch.load('/kaggle/input/yolox-m/yolox_m.pth')['model'], strict = True)
 
     model2 = Head2()
    
@@ -150,16 +150,16 @@ def train(
             imgs[:, 2] = imgs[:, 2] * 255
             model1.cuda().eval()
             xin, yolo_outputs, reid_idx = model1(imgs.cuda())
-            filtered_outputs = []
-            filtered_outputs_reid_idx = []
-            for batch_idx in range(len(yolo_outputs)):
-                batch_data = yolo_outputs[batch_idx]
-                batch_reid_idx = reid_idx[batch_idx]
-                class_mask = batch_data[:, 6] == 0
-                filtered_output = batch_data[class_mask, :]
-                filtered_reid_idx = batch_reid_idx[class_mask]
-                filtered_outputs.append(filtered_output)
-                filtered_outputs_reid_idx.append(filtered_reid_idx)
+            # filtered_outputs = []
+            # filtered_outputs_reid_idx = []
+            # for batch_idx in range(len(yolo_outputs)):
+            #     batch_data = yolo_outputs[batch_idx]
+            #     batch_reid_idx = reid_idx[batch_idx]
+            #     class_mask = batch_data[:, 6] == 0
+            #     filtered_output = batch_data[class_mask, :]
+            #     filtered_reid_idx = batch_reid_idx[class_mask]
+            #     filtered_outputs.append(filtered_output)
+            #     filtered_outputs_reid_idx.append(filtered_reid_idx)
             
             # for name, param in model.named_parameters():
             #     if param.requires_grad:
