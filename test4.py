@@ -195,7 +195,7 @@ sns.histplot(false, bins=30, kde=False, color='red', label='Histogram',  stat= '
 # sns.kdeplot(false, color='red', label = 'false')
 
 # Thêm tiêu đề và nhãn cho các trục
-plt.title('Epoch 40')
+plt.title('Epoch 20 NEW DATA (50 images)')
 plt.xlabel('Value')
 plt.ylabel('Frequency')
 

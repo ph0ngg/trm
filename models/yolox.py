@@ -128,7 +128,7 @@ class Head2(nn.Module):
     def __init__(self):
         super().__init__()
         self.nids = 1638
-        self.embed_length = 384
+        self.embed_length = 512
         # self.neck2 = nn.Conv2d(1024, self.embed_length, 1, 1)
         # self.neck1 = nn.Conv2d(512, self.embed_length, 1, 1)
         self.neck0 = nn.Conv2d(192, 192, 1, 1)
@@ -139,6 +139,10 @@ class Head2(nn.Module):
         self.os_block_3 = OSBlock(in_channels= 192, out_channels= 288)
         self.os_block_4 = OSBlock(in_channels= 288, out_channels= 384)
         self.global_avgpool = nn.AdaptiveAvgPool2d(1)
+
+        self.fc = self._construct_fc_layer(
+            self.embed_length, 384, dropout_p=None
+        )
 
         self.linear = nn.Linear(self.embed_length, self.nids)
         self.type_loss = 'triplet_and_ce'
@@ -163,6 +167,8 @@ class Head2(nn.Module):
         x = self.os_block_4(x) #B, 384, H, W
         v = self.global_avgpool(x)
         v = v.view(v.size(0), -1)
+        if self.fc is not None:
+            v = self.fc(v)
         y = self.linear(v)
         #print(target_ids.shape)
         #y: num_peo, num_ids
@@ -184,7 +190,27 @@ class Head2(nn.Module):
         else:
 
             return 0.5*triplet_loss(v, target_ids) + 0.5 * cross_entropy_loss(y, target_ids.long())
+        
+    def _construct_fc_layer(self, fc_dims, input_dim, dropout_p=None):
+        if fc_dims is None or fc_dims < 0:
+            self.feature_dim = input_dim
+            return None
 
+        if isinstance(fc_dims, int):
+            fc_dims = [fc_dims]
+
+        layers = []
+        for dim in fc_dims:
+            layers.append(nn.Linear(input_dim, dim))
+            layers.append(nn.BatchNorm1d(dim))
+            layers.append(nn.ReLU(inplace=True))
+            if dropout_p is not None:
+                layers.append(nn.Dropout(p=dropout_p))
+            input_dim = dim
+
+        self.feature_dim = fc_dims[-1]
+
+        return nn.Sequential(*layers)
 
         
 #test_matching
