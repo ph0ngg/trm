@@ -143,7 +143,7 @@ class Head2(nn.Module):
         self.linear = nn.Linear(self.embed_length, self.nids)
         self.type_loss = 'triplet_and_ce'
 
-    def forward(self, xin, targets = None):
+    def forward(self, xin, height, width, targets = None):
         # neck_feat_0 = self.cbam0(self.neck0(xin[0])) # chi lay output tu dark3
         #targets.shape: B, n_peo, 6
         next_feat_0 = self.cbam0(xin[0])
@@ -151,16 +151,16 @@ class Head2(nn.Module):
         out_boxes = []
         target_ids = targets.view(-1, 6)[:, 1]
         for box in boxes:
-            box[:, 2] *= 608
-            box[:, 3] *= 1088
-            box[:, 4] *= 608
-            box[:, 5] *= 1088
+            box[:, 2] *= width
+            box[:, 3] *= height
+            box[:, 4] *= width
+            box[:, 5] *= height
             out_boxes.append(cxcywh2xyxy(box[:, 2:6]))
-
+        #print(out_boxes)
         people_feature_map = ops.roi_align(next_feat_0, out_boxes, output_size = (64, 32), spatial_scale = 0.125, sampling_ratio=2)
         #print(people_feature_map.shape)
         x = self.os_block_3(people_feature_map)
-        x = self.os_block_4(x) #B, 512, H, W
+        x = self.os_block_4(x) #B, 384, H, W
         v = self.global_avgpool(x)
         v = v.view(v.size(0), -1)
         y = self.linear(v)

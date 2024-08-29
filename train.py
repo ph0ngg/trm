@@ -164,8 +164,8 @@ def train(
             # for name, param in model.named_parameters():
             #     if param.requires_grad:
             #         print(name, param.requires_grad)
-
-            loss = model2(xin, targets.cuda())
+            _, _, height, width = imgs.shape
+            loss = model2(xin, height, width, targets.cuda())
             total_loss += loss
 
             #print(loss)
