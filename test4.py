@@ -20,7 +20,8 @@ model1 = YOLOX()
 model2 = Head2()
 
 model1.load_state_dict(torch.load('/mnt/data_ubuntu/phongnn/yolox_m.pth')['model'], strict = False)
-model2.load_state_dict(torch.load('/mnt/data_ubuntu/phongnn/kaggl/weights_epoch_20.pt')['model'])
+model2.load_state_dict(torch.load('/mnt/data_ubuntu/phongnn/kaggl/weights_epoch_40.pt')['model'])
+print(torch.load('/mnt/data_ubuntu/phongnn/kaggl/latest.pt')['epoch'])
 
 path_to_img1 = '/mnt/data_ubuntu/phongnn/Market-1501-v15.09.15/bounding_box_train/0002_c1s1_000451_03.jpg'
 
@@ -33,8 +34,8 @@ import os
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
 
-query_path = '/mnt/data_ubuntu/phongnn/images/query'
-gallery_path = '/mnt/data_ubuntu/phongnn/images/gallery'
+query_path = '/mnt/data_ubuntu/phongnn/Towards-Realtime-MOT/eval_data/query'
+gallery_path = '/mnt/data_ubuntu/phongnn/Towards-Realtime-MOT/eval_data/gallery'
 
 query_vector_matrix = []
 gallery_vector_matrix = []
@@ -194,11 +195,31 @@ sns.histplot(false, bins=30, kde=False, color='red', label='Histogram',  stat= '
 # sns.kdeplot(true, color='green', label='true')
 # sns.kdeplot(false, color='red', label = 'false')
 
+
+
+#mean
+mean_true = np.mean(true)
+mean_false = np.mean(false)
+#Deviation
+std_true = np.std(true)
+std_false = np.std(false)
+
+
 # Thêm tiêu đề và nhãn cho các trục
-plt.title('Epoch 20 NEW DATA (50 images)')
+plt.title('Epoch 40 - ADD FC - (189 images Market)')
+plt.gca().set_yticks(np.arange(0, 0.2, 0.02)) 
 plt.xlabel('Value')
 plt.ylabel('Frequency')
 
+
+
+plt.axvline(mean_true, color='green', linestyle='--', label=f'Mean of true: {mean_true:.2f}')
+plt.axvline(mean_true - std_true, color='green', linestyle=':', label=f'Standard Deviation of true: ±{std_true:.2f}')
+plt.axvline(mean_true + std_true, color='green', linestyle=':')
+
+plt.axvline(mean_false, color='red', linestyle='--', label=f'Mean of false: {mean_false:.2f}')
+plt.axvline(mean_false - std_false, color='red', linestyle=':', label=f'Standard Deviation of false: ±{std_false:.2f}')
+plt.axvline(mean_false + std_false, color='red', linestyle=':')
 # Thêm chú thích
 plt.legend()
 

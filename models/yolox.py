@@ -11,7 +11,7 @@ import torch
 from .matching import *
 from .losses import *
 from .network_blocks import OSNet, OSBlock
-
+from .osnet import *
 from models.utils.boxes import postprocess, cxcywh2xyxy
 
 
@@ -35,7 +35,7 @@ class YOLOX(nn.Module):
 
     def forward(self, x, targets=None):
         # fpn output content features of [dark3, dark4, dark5]
-        fpn_outs = self.backbone(x)
+        fpn_outs, x2 = self.backbone(x)
         #print(fpn_outs[0].shape)
         if self.training:
             assert targets is not None
@@ -57,7 +57,7 @@ class YOLOX(nn.Module):
             #anh 1 ---> id cua anh 1 ---> loss
             #output co dang la (batch, so object, 7)
             
-            return fpn_outs, yolo_outputs, reid_idx
+            return x2, yolo_outputs, reid_idx
 
     def visualize(self, x, targets, save_prefix="assign_vis_"):
         fpn_outs = self.backbone(x)
@@ -150,7 +150,7 @@ class Head2(nn.Module):
     def forward(self, xin, height, width, targets = None):
         # neck_feat_0 = self.cbam0(self.neck0(xin[0])) # chi lay output tu dark3
         #targets.shape: B, n_peo, 6
-        next_feat_0 = self.cbam0(xin[0])
+        next_feat_0 = self.cbam0(xin)
         boxes = list(torch.unbind(targets, dim=0))
         out_boxes = []
         target_ids = targets.view(-1, 6)[:, 1]
@@ -216,3 +216,23 @@ class Head2(nn.Module):
 #test_matching
 
 #training: model1(img) --> output (b, n_object, 7), vi tri reid_idx
+class Head_OSNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.osnet = osnet_x0_75()
+    def forward(self, xin, width, height, targets = None):
+        boxes = list(torch.unbind(targets, dim=0))
+        out_boxes = []
+        target_ids = targets.view(-1, 6)[:, 1]
+        for box in boxes:
+            box[:, 2] *= width
+            box[:, 3] *= height
+            box[:, 4] *= width
+            box[:, 5] *= height
+            out_boxes.append(cxcywh2xyxy(box[:, 2:6]))
+        #print(out_boxes)
+        people_feature_map = ops.roi_align(xin[0], out_boxes, output_size = (64, 32), spatial_scale = 0.125, sampling_ratio=2)
+        print(people_feature_map.shape)
+
+        v = self.osnet(people_feature_map)
+        return v
